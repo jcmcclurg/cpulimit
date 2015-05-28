@@ -1,7 +1,7 @@
 CC?=gcc
 CFLAGS?=-Wall -g -D_GNU_SOURCE
 TARGETS=cpulimit
-LIBS=list.o process_iterator.o process_group.o
+LIBS=list.o process_iterator.o process_group.o commonFunctions.o
 
 UNAME := $(shell uname)
 
@@ -22,6 +22,9 @@ list.o: list.c list.h
 
 process_group.o: process_group.c process_group.h process_iterator.o list.o
 	$(CC) -c process_group.c $(CFLAGS)
+
+commonFunctions.o: commonFunctions.c commonFunctions.h
+	$(CC) -c commonFunctions.c $(CFLAGS)
 
 clean:
 	rm -f *~ *.o $(TARGETS)

@@ -43,6 +43,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "commonFunctions.h"
+
 #include "process_group.h"
 #include "list.h"
 
@@ -182,7 +184,9 @@ int get_pid_max()
 #endif
 }
 
-void limit_process(pid_t pid, double limit, int include_children)
+double global_limit;
+
+void limit_process(pid_t pid, int include_children)
 {
 	//slice of the slot in which the process is allowed to run
 	struct timespec twork;
@@ -240,13 +244,13 @@ void limit_process(pid_t pid, double limit, int include_children)
 		//adjust work and sleep time slices
 		if (pcpu < 0) {
 			//it's the 1st cycle, initialize workingrate
-			pcpu = limit;
-			workingrate = limit;
-			twork.tv_nsec = TIME_SLOT * limit * 1000;
+			pcpu = global_limit;
+			workingrate = global_limit;
+			twork.tv_nsec = TIME_SLOT * global_limit * 1000;
 		}
 		else {
 			//adjust workingrate
-			workingrate = MIN(workingrate / pcpu * limit, 1);
+			workingrate = MIN(workingrate / pcpu * global_limit, 1);
 			twork.tv_nsec = TIME_SLOT * 1000 * workingrate;
 		}
 		tsleep.tv_nsec = TIME_SLOT * 1000 - twork.tv_nsec;
@@ -306,6 +310,19 @@ void limit_process(pid_t pid, double limit, int include_children)
 			nanosleep(&tsleep,NULL);
 		}
 		c++;
+
+		// Check if there is user input (a new CPU setpoint) to be read.
+		// NOTE: No error checking is done on the input. ATOF function is used.
+		if(checkStdin()){
+			char* str;
+			double d;
+			str = readLine();
+			if(str != NULL){
+				d = atof(str);
+				global_limit = d;
+				printf("Set CPU limit to %g %%\n",d*100);
+			}
+		}
 	}
 	close_process_group(&pgroup);
 }
@@ -396,8 +413,8 @@ int main(int argc, char **argv) {
 		print_usage(stderr, 1);
 		exit(1);
 	}
-	double limit = perclimit / 100.0;
-	if (limit<0 || limit >NCPU) {
+	global_limit = perclimit / 100.0;
+	if (global_limit<0 || global_limit >NCPU) {
 		fprintf(stderr,"Error: limit must be in the range 0-%d00\n", NCPU);
 		print_usage(stderr, 1);
 		exit(1);
@@ -477,7 +494,7 @@ int main(int argc, char **argv) {
 			else {
 				//limiter code
 				if (verbose) printf("Limiting process %d\n",child);
-				limit_process(child, limit, include_children);
+				limit_process(child, include_children);
 				exit(0);
 			}
 		}
@@ -516,7 +533,7 @@ int main(int argc, char **argv) {
 			}
 			printf("Process %d found\n", pid);
 			//control
-			limit_process(pid, limit, include_children);
+			limit_process(pid, include_children);
 		}
 		if (lazy) break;
 		sleep(2);
